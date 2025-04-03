@@ -3,10 +3,12 @@ import json
 import time
 import random
 import string
+import asyncio
 
 import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+import aiohttp
 
 
 def scrape_relic_sets(url, save_path):
@@ -74,7 +76,7 @@ def download_images(json_path, save_dir):
         if image_url:
             try:
                 # Random delay between 3 and 6 seconds
-                delay = random.uniform(3, 6)
+                delay = random.uniform(1, 3)
                 time.sleep(delay)
 
                 # Get the image content
@@ -142,38 +144,91 @@ def scrape_relic_stats(url, save_path):
         print(f"An error occurred: {e}")
 
 
-def scrape_lightcone_info(url):
+def scrape_lightcone_info(url, target_name):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
 
-    # try:
-    # Send a GET request to the URL
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.content, 'html.parser')
+    try:
+        # Send a GET request to the URL
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
 
-    # Find the table with the specific title
-    table = soup.find('table')
-    rows = table.find_all('tr')
-    lightcone_name = rows[0].get_text(strip=True).split()
-    lightcone_name = '_'.join(lightcone_name).lower()
-    lightcone_image_url = rows[1].find('img')['data-src']
-    lightcone_image_rate = len(rows[2].get_text().split('\n\n\n')[-2].strip() )
-    lightcone_type = rows[3].get_text().split('\n\n')[1].strip().split()
-    lightcone_type = '_'.join(lightcone_type).lower()
-    lightcone_ability = rows[4].find_all('td')[0]
-    # Remove the first <b> tag
-    first_b_tag = lightcone_ability.find('b')
-    if first_b_tag:
-        first_b_tag.extract() 
-    lightcone_ability = lightcone_ability.get_text().strip()
-    
-    lightcone_info = {
-        "name": lightcone_name,
-        "image": lightcone_image_url,
-        "rate": lightcone_image_rate,
-        "type": lightcone_type,
-        "ability": lightcone_ability,
-    }
+        # Find the table with the specific title as first row
+        tables = soup.find_all('table')
+        target_table = None
+        for table in tables:
+            # Get the first row of the table
+            first_row = table.find('tr')
+            if first_row:
+                # Extract the text from the first row
+                first_row_text = first_row.get_text(strip=True)
+
+                # Check if the target text is in the first row
+                if target_name == first_row_text:
+                    target_table = table
+                    break
+        
+        rows = target_table.find_all('tr')
+        lightcone_name = rows[0].get_text(strip=True).split()
+        lightcone_name = '_'.join(lightcone_name).lower()
+        lightcone_image_url = rows[1].find('img')['data-src']
+        lightcone_image_rate = len(rows[2].get_text().split('\n\n\n')[-2].strip() )
+        lightcone_type = rows[3].get_text().split('\n\n')[1].strip().split()
+        lightcone_type = '_'.join(lightcone_type).lower()
+        lightcone_ability = rows[4].find_all('td')[0]
+
+        # Remove the first <b> tag
+        first_b_tag = lightcone_ability.find('b')
+        if first_b_tag:
+            first_b_tag.extract() 
+        lightcone_ability = lightcone_ability.get_text().strip()
+
+        lightcone_info = {
+            "name": lightcone_name,
+            "image": lightcone_image_url,
+            "rate": lightcone_image_rate,
+            "type": lightcone_type,
+            "ability": lightcone_ability,
+        }
+    except Exception as e:
+        print(f"Error parsing lightcone info: {e} - URL: {url}")
+
     return lightcone_info
+
+
+def scrape_light_cones(url, save_path):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    lightcone_dict = dict()
+
+    try:
+        # Send a GET request to the URL
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Find the table containing "Available Light Cones"
+        target_tag = soup.find(lambda tag: tag.string == "Available Light Cones")
+        table = target_tag.find_next('table', class_="a-table a-table a-table")
+        rows = table.find_all('tr')[1:]
+
+        for row in tqdm(rows, total=len(rows), desc="Scraping light cones"):
+            target_name = row.find('a').get_text(strip=True)
+            lightcone_url = row.find('a')["href"]
+            lightcone_info = scrape_lightcone_info(lightcone_url, target_name)
+            lightcone_name = lightcone_info.pop("name")
+            lightcone_dict[lightcone_name] = lightcone_info
+            
+        # Save the extracted data to a JSON file
+        with open(save_path, 'w', encoding='utf-8') as f:
+            json.dump(lightcone_dict, f, indent=4, ensure_ascii=False)
+
+        print(f"Light Cones data have been successfully scraped and saved to {save_path}!")
+
+    except requests.exceptions.RequestException as e:
+        print(f"HTTP request error: {e}")
+    except Exception as e:
+        print(f"An error occurred: {e} - URL: {lightcone_url}")
