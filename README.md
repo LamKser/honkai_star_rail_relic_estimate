@@ -3,7 +3,8 @@
 # Resource
 | Resource | Link | Done |
 |---|---|---|
-| Relic Image | [https://game8.co/games/Honkai-Star-Rail/archives/406885](https://game8.co/games/Honkai-Star-Rail/archives/406885) | ✅ |
+| Relic Info | [https://www.prydwen.gg/star-rail/guides/relic-sets](https://www.prydwen.gg/star-rail/guides/relic-sets) | ⬜ |
 | Relic Stat | [https://honkai-star-rail.fandom.com/wiki/Relic/Stats](https://honkai-star-rail.fandom.com/wiki/Relic/Stats) | ✅ |
-| Character Image | [https://game8.co/games/Honkai-Star-Rail/archives/404256](https://game8.co/games/Honkai-Star-Rail/archives/404256) | ⬜ |
-| Lightcone | [https://game8.co/games/Honkai-Star-Rail/archives/406599](https://game8.co/games/Honkai-Star-Rail/archives/406599) | ✅ |
+| Character Info | [https://www.prydwen.gg/star-rail/characters](https://www.prydwen.gg/star-rail/characters) | ✅ |
+| Lightcone | [https://www.prydwen.gg/star-rail/light-cones/](https://www.prydwen.gg/star-rail/light-cones/) | ⬜ |
+| Lightcone Image | [https://the-astral-express-archive.tumblr.com/lcgallery](https://the-astral-express-archive.tumblr.com/lcgallery) | ⬜ |

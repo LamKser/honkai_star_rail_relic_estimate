@@ -3,12 +3,11 @@ import json
 import time
 import random
 import string
-import asyncio
+import re
 
 import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
-import aiohttp
 
 
 def scrape_relic_sets(url, save_path):
@@ -16,7 +15,7 @@ def scrape_relic_sets(url, save_path):
     if not os.path.exists(parent_path):
         os.makedirs(parent_path)
 
-    relic_sets = {}
+    relics = {}
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -27,52 +26,54 @@ def scrape_relic_sets(url, save_path):
         soup = BeautifulSoup(response.content, 'html.parser')
 
         # Find the table with relic sets
-        tables = soup.find_all('table', class_='a-table a-table a-table')
-        relic_type = ["cavern", "planar_ornament"]
-        for re_type, table in zip(relic_type, tables):
-            # Skip header row
-            rows = table.find_all('tr')[1:]
-
-            for row in tqdm(rows, total=len(rows), desc="Scraping relic sets"):
-                cols = row.find_all('td')
-                img_url = cols[0].find('img')['data-src']
-
-                relic_name = cols[0].get_text().strip()
-                translator = str.maketrans('', '', string.punctuation)
-                clean_text = relic_name.translate(translator)
-                relic_name = clean_text.split()
-                relic_name = '_'.join(relic_name).lower()
-
-                relic_effect = cols[1].get_text().strip().split('\n')
+        relic_sets = soup.find('div', class_='relic-set-container row row-cols-xxl-2 row-cols-1')
+        relic_cols = relic_sets.find_all('div', class_='col')
+        
+        for relic in relic_cols:
+            relic_image_url = "https://www.prydwen.gg" + relic.find_all("img")[-1]["src"]
+            relic_data = relic.find("div", class_="hsr-relic-data")
+            relic_name = relic_data.find("h4").get_text(strip=True).lower().replace(' ', '_')
+            relic_type = relic_data.find("div", class_="hsr-relic-info").find("strong").get_text(strip=True).lower().replace(' ', '_')
+            relic_content = relic.find("div", class_="hsr-relic-content").find("div").find_all("div")
             
-                relic_sets[relic_name] = {
-                    "type": re_type,
-                    "image": img_url,
-                    "2_piece_effect": relic_effect[0].strip(),
-                    "4_piece_effect": relic_effect[1].strip() if len(relic_effect) > 1 else None,
-                }
-
+            relic_2_set = relic_content[0].get_text(strip=True)
+            if len(relic_content) == 2:
+                relic_4_set = relic_content[1].get_text(strip=True)
+            
+            relics[relic_name] = {
+                "type": relic_type,
+                "image": relic_image_url,
+                "2_piece_effect": relic_2_set,
+                "4_piece_effect": relic_4_set if len(relic_content) == 2 else None
+            }
+            # break
         # Save to JSON file
         with open(save_path, 'w', encoding='utf-8') as f:
-            json.dump(relic_sets, f, indent=4, ensure_ascii=False)
+            json.dump(relics, f, indent=4, ensure_ascii=False)
 
         print("Relic data has been successfully scraped and saved!")
 
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
+
+
 def download_images(json_path, save_dir):
     # Load the JSON file
     with open(json_path, 'r', encoding='utf-8') as f:
-        relic_data = json.load(f)
+        data = json.load(f)
 
     # Ensure the save directory exists
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
     # Iterate through the relic sets and download images
-    for i, (relic_name, relic_info) in enumerate(relic_data.items(), start=1):
-        image_url = relic_info.get("image")
+    for i, (name, info) in enumerate(data.items(), start=1):
+        name = re.split(r'[^a-zA-Z0-9\s]', name)
+        name = list(filter(lambda x: x.strip(), name))
+        name = '_'.join(name)
+
+        image_url = info.get("image")
         if image_url:
             try:
                 # Random delay between 3 and 6 seconds
@@ -84,14 +85,14 @@ def download_images(json_path, save_dir):
                 response.raise_for_status()
 
                 # Save the image to the specified directory
-                image_path = os.path.join(save_dir, f"{relic_name}.png")
+                image_path = os.path.join(save_dir, f"{name}.png")
                 with open(image_path, 'wb') as img_file:
                     for chunk in response.iter_content(1024):
                         img_file.write(chunk)
 
-                print(f"{i}. Downloaded: {relic_name} (Delay: {delay:.2f} seconds)")
+                print(f"{i}. Downloaded: {name} (Delay: {delay:.2f} seconds)")
             except Exception as e:
-                print(f"Failed to download {relic_name}: {e}")
+                print(f"Failed to download {name}: {e}")
 
 
 def scrape_relic_stats(url, save_path):
@@ -144,10 +145,58 @@ def scrape_relic_stats(url, save_path):
         print(f"An error occurred: {e}")
 
 
-def scrape_lightcone_info(url, target_name):
+def scrape_lightcones(url, save_path):
+    parent_path = os.path.join("..", os.path.dirname(save_path))
+    if not os.path.exists(parent_path):
+        os.makedirs(parent_path)
+
+    lightcones = {}
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.content, 'html.parser')
+
+    # Find the table with relic sets
+    lightcone_sets = soup.find('div', class_='relic-set-container row row-cols-xxl-2 row-cols-1')
+    lightcone_cols = lightcone_sets.find_all('div', class_='col')
+
+    for lightcone in tqdm(lightcone_cols, total=len(lightcone_cols), desc="Scraping light cones"):
+        lightcone_image_url = "https://www.prydwen.gg" + lightcone.find_all("img")[1]["data-src"]
+        lightcone_data = lightcone.find("div", class_="hsr-cone-data")
+        lightcone_name = lightcone_data.find("h4").get_text(strip=True).lower().replace(' ', '_')
+        lightcone_name = re.split(r'[^a-zA-Z0-9\s]', lightcone_name)
+        lightcone_name = list(filter(lambda x: x.strip(), lightcone_name))
+        lightcone_name = '_'.join(lightcone_name)
+
+        lightcone_type = lightcone_data.find("div", class_="hsr-cone-info").find_all("strong")
+        lightcone_rate = lightcone_type[0].get_text(strip=True)[0].lower()
+        lightcone_path = lightcone_type[1].get_text(strip=True).lower()
+
+        lightcone_content = lightcone.find("div", class_="hsr-cone-content").get_text().strip()
+        
+        lightcones[lightcone_name] = {
+            "image": lightcone_image_url,
+            "rate": lightcone_rate,
+            "type": lightcone_path,
+            "ability": lightcone_content,
+        }
+    # Save to JSON file
+    with open(save_path, 'w', encoding='utf-8') as f:
+        json.dump(lightcones, f, indent=4, ensure_ascii=False)
+
+    print("Relic data has been successfully scraped and saved!")
+
+
+def scarpe_character_info(url):
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+
+    character_info = dict()
 
     try:
         # Send a GET request to the URL
@@ -155,80 +204,92 @@ def scrape_lightcone_info(url, target_name):
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        # Find the table with the specific title as first row
-        tables = soup.find_all('table')
-        target_table = None
-        for table in tables:
-            # Get the first row of the table
-            first_row = table.find('tr')
-            if first_row:
-                # Extract the text from the first row
-                first_row_text = first_row.get_text(strip=True)
+        # Name
+        character_name = url.split("/")[-1].replace("-", "_").lower()
+        character_info["name"] = character_name
 
-                # Check if the target text is in the first row
-                if target_name == first_row_text:
-                    target_table = table
-                    break
+        # Image url
+        image_area = soup.find('div', class_='right-image')
+        image_url = "https://www.prydwen.gg" + image_area.findChildren("img")[2]["src"]
+        character_info["image"] = image_url
+
+        # Character Intro
+        character_intro = soup.find('div', class_='character-intro')
+        character_path = character_intro.find_all("strong")[1:4]
+
+        # Rate
+        character_rate = character_path[0].get_text(strip=True)[0]
+        character_info["rate"] = character_rate
+
+        # Element
+        character_element = character_path[1].get_text(strip=True).lower()
+        character_info["element"] = character_element
+
+        # Path
+        character_type = character_path[2].get_text().strip().split(' ')[-1].lower()
+        character_info["path"] = character_type
+
+        # Find minor traces
+        minor_traces = soup.find('div', class_='content-header')
+        minor_traces_info = minor_traces.find_next("div", class_="smaller-traces").find_all("div", class_="col")
+
+        for trace in minor_traces_info:
+            trace_stat = trace.get_text(strip=True).split('+')
+            trace_stat[0] = trace_stat[0].lower().strip().replace(' ', '_')
+            character_info[trace_stat[0]] = trace_stat[1].strip()
         
-        rows = target_table.find_all('tr')
-        lightcone_name = rows[0].get_text(strip=True).split()
-        lightcone_name = '_'.join(lightcone_name).lower()
-        lightcone_image_url = rows[1].find('img')['data-src']
-        lightcone_image_rate = len(rows[2].get_text().split('\n\n\n')[-2].strip() )
-        lightcone_type = rows[3].get_text().split('\n\n')[1].strip().split()
-        lightcone_type = '_'.join(lightcone_type).lower()
-        lightcone_ability = rows[4].find_all('td')[0]
-
-        # Remove the first <b> tag
-        first_b_tag = lightcone_ability.find('b')
-        if first_b_tag:
-            first_b_tag.extract() 
-        lightcone_ability = lightcone_ability.get_text().strip()
-
-        lightcone_info = {
-            "name": lightcone_name,
-            "image": lightcone_image_url,
-            "rate": lightcone_image_rate,
-            "type": lightcone_type,
-            "ability": lightcone_ability,
-        }
+        # Basic stat
+        character_info["basic_stat"] = dict()
+        basic_box = soup.find("div", class_="stat-box")
+        all_basic_stat = basic_box.find_all("div", class_="info-list-row")
+        for a in all_basic_stat:
+            text = a.get_text().lower()
+            stat = re.split(r'([A-Za-z]+)(\d+)', text)
+            character_info["basic_stat"][stat[1]] = stat[2]
     except Exception as e:
         print(f"Error parsing lightcone info: {e} - URL: {url}")
+    
+    return character_info
 
-    return lightcone_info
+# print(scarpe_character_info("https://www.prydwen.gg/star-rail/characters/argenti")
+# )
 
 
-def scrape_light_cones(url, save_path):
+def scrape_characters(url, save_path):
+    parent_path = os.path.join("..", os.path.dirname(save_path))
+    if not os.path.exists(parent_path):
+        os.makedirs(parent_path)
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
-    lightcone_dict = dict()
+    character_dict = dict()
 
     try:
         # Send a GET request to the URL
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
+        all_characters = soup.find('div', class_='employees-container hsr-cards').find_all("div", class_="avatar-card card")
 
-        # Find the table containing "Available Light Cones"
-        target_tag = soup.find(lambda tag: tag.string == "Available Light Cones")
-        table = target_tag.find_next('table', class_="a-table a-table a-table")
-        rows = table.find_all('tr')[1:]
-
-        for row in tqdm(rows, total=len(rows), desc="Scraping light cones"):
-            target_name = row.find('a').get_text(strip=True)
-            lightcone_url = row.find('a')["href"]
-            lightcone_info = scrape_lightcone_info(lightcone_url, target_name)
-            lightcone_name = lightcone_info.pop("name")
-            lightcone_dict[lightcone_name] = lightcone_info
-            
+        for card in tqdm(all_characters, total=len(all_characters), desc="Scraping character"):
+            future_character = card.find("span", class_="tag future")
+            if not future_character:
+                character_url = "https://www.prydwen.gg" + card.find('a')["href"]
+                character_info = scarpe_character_info(character_url)
+                character_name = character_info.pop("name")
+                character_dict[character_name] = character_info
+            else:
+                name = card.find("span", class_="emp-name").get_text()
+                print(f"Future Character: {name}")
+                continue
         # Save the extracted data to a JSON file
         with open(save_path, 'w', encoding='utf-8') as f:
-            json.dump(lightcone_dict, f, indent=4, ensure_ascii=False)
+            json.dump(character_dict, f, indent=4, ensure_ascii=False)
 
-        print(f"Light Cones data have been successfully scraped and saved to {save_path}!")
+        print(f"Character data have been successfully scraped and saved to {save_path}!")
 
     except requests.exceptions.RequestException as e:
         print(f"HTTP request error: {e}")
     except Exception as e:
-        print(f"An error occurred: {e} - URL: {lightcone_url}")
+        print(f"An error occurred: {e} - URL: ")
