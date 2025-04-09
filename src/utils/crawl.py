@@ -8,6 +8,8 @@ import re
 import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+from Levenshtein import ratio
+import numpy as np
 
 
 def scrape_relic_sets(url, save_path):
@@ -33,6 +35,9 @@ def scrape_relic_sets(url, save_path):
             relic_image_url = "https://www.prydwen.gg" + relic.find_all("img")[-1]["src"]
             relic_data = relic.find("div", class_="hsr-relic-data")
             relic_name = relic_data.find("h4").get_text(strip=True).lower().replace(' ', '_')
+            relic_name = re.split(r'[^a-zA-Z0-9\s]', relic_name)
+            relic_name = list(filter(lambda x: x.strip(), relic_name))
+            relic_name = '_'.join(relic_name)
             relic_type = relic_data.find("div", class_="hsr-relic-info").find("strong").get_text(strip=True).lower().replace(' ', '_')
             relic_content = relic.find("div", class_="hsr-relic-content").find("div").find_all("div")
             
@@ -145,7 +150,7 @@ def scrape_relic_stats(url, save_path):
         print(f"An error occurred: {e}")
 
 
-def scrape_lightcones(url, save_path):
+def scrape_lightcones(url_info, url_image, save_path):
     parent_path = os.path.join("..", os.path.dirname(save_path))
     if not os.path.exists(parent_path):
         os.makedirs(parent_path)
@@ -155,16 +160,31 @@ def scrape_lightcones(url, save_path):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
 
-    response = requests.get(url, headers=headers)
+    # Get lightcone
+    lightcone_image_dict = dict()
+    response = requests.get(url_image, headers=headers)
     response.raise_for_status()
     soup = BeautifulSoup(response.content, 'html.parser')
+    lightcone_body_html = soup.find("div", class_="clearfix")
+    lightcone_list_html = lightcone_body_html.find_all("div")
+    for i in range(0, len(lightcone_list_html), 3):
+        lightcone_image_url = lightcone_list_html[i].find("img")["src"]
+        lightcone_name = lightcone_list_html[i + 2].get_text().strip().split('\n')[0].strip()
+        lightcone_name = lightcone_name.replace(' ', '_').lower()
+        lightcone_image_dict[lightcone_name] = lightcone_image_url
+        # break
+    lightcone_name_list = list(lightcone_image_dict.keys())
 
-    # Find the table with relic sets
+    # Get lightcone info
+    response = requests.get(url_info, headers=headers)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.content, 'html.parser')
+    
     lightcone_sets = soup.find('div', class_='relic-set-container row row-cols-xxl-2 row-cols-1')
     lightcone_cols = lightcone_sets.find_all('div', class_='col')
 
     for lightcone in tqdm(lightcone_cols, total=len(lightcone_cols), desc="Scraping light cones"):
-        lightcone_image_url = "https://www.prydwen.gg" + lightcone.find_all("img")[1]["data-src"]
+
         lightcone_data = lightcone.find("div", class_="hsr-cone-data")
         lightcone_name = lightcone_data.find("h4").get_text(strip=True).lower().replace(' ', '_')
         lightcone_name = re.split(r'[^a-zA-Z0-9\s]', lightcone_name)
@@ -177,8 +197,13 @@ def scrape_lightcones(url, save_path):
 
         lightcone_content = lightcone.find("div", class_="hsr-cone-content").get_text().strip()
         
+        ## Find closest lightcone name
+        name_ratio_list = [ratio(lightcone_name, name) for name in lightcone_name_list]
+        max_index = np.argmax(name_ratio_list)
+        lightcone_name_max_ratio = lightcone_name_list[max_index]
+        
         lightcones[lightcone_name] = {
-            "image": lightcone_image_url,
+            "image": lightcone_image_dict[lightcone_name_max_ratio],
             "rate": lightcone_rate,
             "type": lightcone_path,
             "ability": lightcone_content,
@@ -233,10 +258,11 @@ def scarpe_character_info(url):
         minor_traces = soup.find('div', class_='content-header')
         minor_traces_info = minor_traces.find_next("div", class_="smaller-traces").find_all("div", class_="col")
 
+        character_info["sub_stat"] = dict()
         for trace in minor_traces_info:
             trace_stat = trace.get_text(strip=True).split('+')
             trace_stat[0] = trace_stat[0].lower().strip().replace(' ', '_')
-            character_info[trace_stat[0]] = trace_stat[1].strip()
+            character_info["sub_stat"][trace_stat[0]] = trace_stat[1].strip()
         
         # Basic stat
         character_info["basic_stat"] = dict()
