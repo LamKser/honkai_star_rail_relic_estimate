@@ -4,6 +4,7 @@ import time
 import random
 import string
 import re
+from typing import Optional, Dict, Union
 
 import requests
 from bs4 import BeautifulSoup
@@ -12,7 +13,24 @@ from Levenshtein import ratio
 import numpy as np
 
 
-def scrape_relic_sets(url, save_path):
+def scrape_relic_sets(url: str, save_path: str) -> None:
+    """
+    Scrapes relic set data from a given URL and saves it to a JSON file.
+
+    Args:
+        url (str): The URL to scrape relic set data from
+        save_path (str): Path where the JSON file will be saved
+        
+    The data is saved as a JSON file with the following structure:
+    {
+        "relic_name": {
+            "type": str,
+            "image": str,
+            "2_piece_effect": str,
+            "4_piece_effect": str or None
+        }
+    }
+    """
     parent_path = os.path.join("..", os.path.dirname(save_path))
     if not os.path.exists(parent_path):
         os.makedirs(parent_path)
@@ -62,8 +80,19 @@ def scrape_relic_sets(url, save_path):
         print(f"An error occurred: {str(e)}")
 
 
-
-def download_images(json_path, save_dir):
+def download_images(json_path: str, save_dir: str) -> None:
+    """
+    Downloads images from URLs specified in a JSON file and saves them to a directory.
+    
+    Args:
+        json_path (str): Path to the JSON file containing image URLs
+        save_dir (str): Directory where the images will be saved
+        
+    The JSON file should have a structure where each entry contains an 'image' field
+    with the URL to download. Images are saved with the key name from the JSON file,
+    with special characters removed. Adds random delays between downloads to avoid
+    overwhelming the server.
+    """
     # Load the JSON file
     with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -100,7 +129,25 @@ def download_images(json_path, save_dir):
                 print(f"Failed to download {name}: {e}")
 
 
-def scrape_relic_stats(url, save_path):
+def scrape_relic_stats(url: str, save_path: str) -> None:
+    """
+    Scrapes relic stat information from a given URL and saves it to a JSON file.
+    
+    Args:
+        url (str): The URL to scrape relic stat data from
+        save_path (str): Path where the JSON file will be saved
+        
+    Extracts information about main stats available for each relic slot and possible
+    sub stats. The data is saved as a JSON file with the structure:
+    {
+        "main_stat": {
+            "head": [list of possible main stats],
+            "hands": [list of possible main stats],
+            ...
+        },
+        "sub_stat": [list of all possible sub stats]
+    }
+    """
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -150,7 +197,27 @@ def scrape_relic_stats(url, save_path):
         print(f"An error occurred: {e}")
 
 
-def scrape_lightcones(url_info, url_image, save_path):
+def scrape_lightcones(url_info: str, url_image: str, save_path: str) -> None:
+    """
+    Scrapes lightcone data from two URLs (info and images) and saves it to a JSON file.
+    
+    Args:
+        url_info (str): URL to scrape lightcone information from
+        url_image (str): URL to scrape lightcone images from
+        save_path (str): Path where the JSON file will be saved
+        
+    First collects image URLs from url_image, then matches them with lightcone
+    information from url_info using name similarity. The data is saved as a JSON
+    file with the structure:
+    {
+        "lightcone_name": {
+            "image": str,
+            "rate": str,
+            "type": str,
+            "ability": str
+        }
+    }
+    """
     parent_path = os.path.join("..", os.path.dirname(save_path))
     if not os.path.exists(parent_path):
         os.makedirs(parent_path)
@@ -215,8 +282,25 @@ def scrape_lightcones(url_info, url_image, save_path):
     print("Relic data has been successfully scraped and saved!")
 
 
-def scarpe_character_info(url):
-
+def scarpe_character_info(url: str) -> Dict[str, Union[str, Dict[str, str]]]:
+    """
+    Scrapes detailed information about a character from a specific URL.
+    
+    Args:
+        url (str): URL of the character page to scrape
+        
+    Returns:
+        dict: A dictionary containing character information with the following structure:
+            {
+                "name": str,
+                "image": str,
+                "rate": str,
+                "element": str,
+                "path": str,
+                "sub_stat": {stat_name: value},
+                "basic_stat": {stat_name: value}
+            }
+    """
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -277,11 +361,29 @@ def scarpe_character_info(url):
     
     return character_info
 
-# print(scarpe_character_info("https://www.prydwen.gg/star-rail/characters/argenti")
-# )
 
-
-def scrape_characters(url, save_path):
+def scrape_characters(url: str, save_path: str) -> None:
+    """
+    Scrapes character data from a given URL and saves it to a JSON file.
+    
+    Args:
+        url (str): The URL to scrape character data from
+        save_path (str): Path where the JSON file will be saved
+        
+    Scrapes basic information about all characters from the main character list page,
+    then collects detailed information for each character. The data is saved as a JSON
+    file with the structure:
+    {
+        "character_name": {
+            "image": str,
+            "rate": str,
+            "element": str,
+            "path": str,
+            "sub_stat": {stat_name: value},
+            "basic_stat": {stat_name: value}
+        }
+    }
+    """
     parent_path = os.path.join("..", os.path.dirname(save_path))
     if not os.path.exists(parent_path):
         os.makedirs(parent_path)
