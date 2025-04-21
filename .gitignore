@@ -172,5 +172,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-data/
+data/images/
+data/*.json
+data/*.html
 notebook/test.ipynb
+drafts/

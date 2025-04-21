@@ -12,6 +12,8 @@ from tqdm import tqdm
 from Levenshtein import ratio
 import numpy as np
 
+from src.utils.check import check_exist_json_file
+from src.utils.print import print_title
 
 def scrape_relic_sets(url: str, save_path: str) -> None:
     """
@@ -35,7 +37,8 @@ def scrape_relic_sets(url: str, save_path: str) -> None:
     if not os.path.exists(parent_path):
         os.makedirs(parent_path)
 
-    relics = {}
+    relics = check_exist_json_file(save_path)
+    relic_name_list = list(relics.keys())
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -49,13 +52,22 @@ def scrape_relic_sets(url: str, save_path: str) -> None:
         relic_sets = soup.find('div', class_='relic-set-container row row-cols-xxl-2 row-cols-1')
         relic_cols = relic_sets.find_all('div', class_='col')
         
-        for relic in relic_cols:
+        print_title("Scraping relic sets")
+        for i, relic in tqdm(
+            enumerate(relic_cols, start=1), 
+            total=len(relic_cols)
+        ):
             relic_image_url = "https://www.prydwen.gg" + relic.find_all("img")[-1]["src"]
             relic_data = relic.find("div", class_="hsr-relic-data")
             relic_name = relic_data.find("h4").get_text(strip=True).lower().replace(' ', '_')
             relic_name = re.split(r'[^a-zA-Z0-9\s]', relic_name)
             relic_name = list(filter(lambda x: x.strip(), relic_name))
             relic_name = '_'.join(relic_name)
+            if (len(relic_name_list) > 0) and (relic_name in relic_name_list):
+                continue
+            else:
+                print(f"{i}. \"{relic_name}\" doesn't exist. ADDING")
+
             relic_type = relic_data.find("div", class_="hsr-relic-info").find("strong").get_text(strip=True).lower().replace(' ', '_')
             relic_content = relic.find("div", class_="hsr-relic-content").find("div").find_all("div")
             
@@ -98,14 +110,20 @@ def download_images(json_path: str, save_dir: str) -> None:
         data = json.load(f)
 
     # Ensure the save directory exists
+    exist_images = list()
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
+    else:
+        exist_images = os.listdir(save_dir)
 
+    print_title("Downloading images")
     # Iterate through the relic sets and download images
     for i, (name, info) in enumerate(data.items(), start=1):
         name = re.split(r'[^a-zA-Z0-9\s]', name)
         name = list(filter(lambda x: x.strip(), name))
         name = '_'.join(name)
+        if (len(exist_images) > 0) and (f"{name}.png" in exist_images):
+            continue
 
         image_url = info.get("image")
         if image_url:
@@ -127,6 +145,7 @@ def download_images(json_path: str, save_dir: str) -> None:
                 print(f"{i}. Downloaded: {name} (Delay: {delay:.2f} seconds)")
             except Exception as e:
                 print(f"Failed to download {name}: {e}")
+    print(f"All images have been downloaded at \"{save_dir}\"!")
 
 
 def scrape_relic_stats(url: str, save_path: str) -> None:
@@ -169,6 +188,7 @@ def scrape_relic_stats(url: str, save_path: str) -> None:
             main_dict[name] = list()
         main_stat_table = table[0].find_all("td")
         
+        print_title("Scraping relic stats")
         for i in range(0, len(main_stat_table), 7):
             main_stat = main_stat_table[i].get_text(strip=True).lower()
             main_stat = main_stat.replace(' ', '_')
@@ -222,7 +242,8 @@ def scrape_lightcones(url_info: str, url_image: str, save_path: str) -> None:
     if not os.path.exists(parent_path):
         os.makedirs(parent_path)
 
-    lightcones = {}
+    lightcones = check_exist_json_file(save_path)
+    exist_lightcone_list = list(lightcones.keys())
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -250,13 +271,21 @@ def scrape_lightcones(url_info: str, url_image: str, save_path: str) -> None:
     lightcone_sets = soup.find('div', class_='relic-set-container row row-cols-xxl-2 row-cols-1')
     lightcone_cols = lightcone_sets.find_all('div', class_='col')
 
-    for lightcone in tqdm(lightcone_cols, total=len(lightcone_cols), desc="Scraping light cones"):
-
+    print_title("Scraping lightcones")
+    for i, lightcone in tqdm(
+        enumerate(lightcone_cols, start=1), 
+        total=len(lightcone_cols)
+    ):
+        
         lightcone_data = lightcone.find("div", class_="hsr-cone-data")
         lightcone_name = lightcone_data.find("h4").get_text(strip=True).lower().replace(' ', '_')
         lightcone_name = re.split(r'[^a-zA-Z0-9\s]', lightcone_name)
         lightcone_name = list(filter(lambda x: x.strip(), lightcone_name))
         lightcone_name = '_'.join(lightcone_name)
+        if (len(exist_lightcone_list) > 0) and (lightcone_name in exist_lightcone_list):
+                continue
+        else:
+            print(f"{i}. \"{lightcone_name}\" doesn't exist. ADDING")
 
         lightcone_type = lightcone_data.find("div", class_="hsr-cone-info").find_all("strong")
         lightcone_rate = lightcone_type[0].get_text(strip=True)[0].lower()
@@ -391,33 +420,42 @@ def scrape_characters(url: str, save_path: str) -> None:
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
-    character_dict = dict()
+    character_dict = check_exist_json_file(save_path)
+    exist_character_list = list(character_dict.keys())
 
-    try:
-        # Send a GET request to the URL
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
-        all_characters = soup.find('div', class_='employees-container hsr-cards').find_all("div", class_="avatar-card card")
+    # Send a GET request to the URL
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.content, 'html.parser')
+    all_characters = soup.find('div', class_='employees-container hsr-cards').find_all("div", class_="avatar-card card")
+    
+    print_title("Scraping characters")
+    for i, card in tqdm(
+        enumerate(all_characters, start=1), 
+        total=len(all_characters)
+    ):
+        
+        future_character = card.find("span", class_="tag future")
 
-        for card in tqdm(all_characters, total=len(all_characters), desc="Scraping character"):
-            future_character = card.find("span", class_="tag future")
-            if not future_character:
-                character_url = "https://www.prydwen.gg" + card.find('a')["href"]
-                character_info = scarpe_character_info(character_url)
-                character_name = character_info.pop("name")
-                character_dict[character_name] = character_info
-            else:
-                name = card.find("span", class_="emp-name").get_text()
-                print(f"Future Character: {name}")
+        if not future_character:
+            character_url = "https://www.prydwen.gg" + card.find('a')["href"]
+            character_name = character_url.split("/")[-1].replace("-", "_").lower()
+            if (len(exist_character_list) > 0) and (character_name in exist_character_list):
                 continue
-        # Save the extracted data to a JSON file
-        with open(save_path, 'w', encoding='utf-8') as f:
-            json.dump(character_dict, f, indent=4, ensure_ascii=False)
+            else:
+                print(f"{i}. {character_name} doesn't exist. ADDING")
 
-        print(f"Character data have been successfully scraped and saved to {save_path}!")
+            character_name = url.split("/")[-1].replace("-", "_").lower()
+            character_info = scarpe_character_info(character_url)
+            character_name = character_info.pop("name")
+            character_dict[character_name] = character_info
+        else:
+            name = card.find("span", class_="emp-name").get_text()
+            print(f"{i}. Future Character: {name}")
+            continue
+    # Save the extracted data to a JSON file
+    with open(save_path, 'w', encoding='utf-8') as f:
+        json.dump(character_dict, f, indent=4, ensure_ascii=False)
 
-    except requests.exceptions.RequestException as e:
-        print(f"HTTP request error: {e}")
-    except Exception as e:
-        print(f"An error occurred: {e} - URL: ")
+    print(f"Character data have been successfully scraped and saved to {save_path}!")
+
